@@ -276,6 +276,7 @@ export function mapToDisplay(
         name: displayName,
         description,
         renderOutputAsMarkdown,
+        args: trackedCall.request.args,
       };
 
       switch (trackedCall.status) {

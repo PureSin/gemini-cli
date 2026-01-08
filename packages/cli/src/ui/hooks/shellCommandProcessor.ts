@@ -123,6 +123,7 @@ export const useShellCommandProcessor = (
           status: ToolCallStatus.Executing,
           resultDisplay: '',
           confirmationDetails: undefined,
+          args: { command: rawQuery },
         };
 
         setPendingHistoryItem({

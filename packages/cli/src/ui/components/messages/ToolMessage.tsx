@@ -6,7 +6,7 @@
 
 import type React from 'react';
 import { useState, useEffect } from 'react';
-import { Box, Text } from 'ink';
+import { Box, Text, useInput } from 'ink';
 import type { IndividualToolCallDisplay } from '../../types.js';
 import { StickyHeader } from '../StickyHeader.js';
 import { ToolResultDisplay } from './ToolResultDisplay.js';
@@ -26,6 +26,7 @@ import type { Config } from '@google/gemini-cli-core';
 import { useInactivityTimer } from '../../hooks/useInactivityTimer.js';
 import { ToolCallStatus } from '../../types.js';
 import { ShellInputPrompt } from '../ShellInputPrompt.js';
+import { copyToClipboard } from '../../utils/commandUtils.js';
 
 export type { TextEmphasis };
 
@@ -59,15 +60,19 @@ export const ToolMessage: React.FC<ToolMessageProps> = ({
   embeddedShellFocused,
   ptyId,
   config,
+  args,
 }) => {
+  const isShellCommand = name === SHELL_COMMAND_NAME || name === 'Shell';
   const isThisShellFocused =
-    (name === SHELL_COMMAND_NAME || name === 'Shell') &&
+    isShellCommand &&
     status === ToolCallStatus.Executing &&
     ptyId === activeShellPtyId &&
     embeddedShellFocused;
 
   const [lastUpdateTime, setLastUpdateTime] = useState<Date | null>(null);
   const [userHasFocused, setUserHasFocused] = useState(false);
+  const [copiedMessage, setCopiedMessage] = useState<string | null>(null);
+
   const showFocusHint = useInactivityTimer(
     !!lastUpdateTime,
     lastUpdateTime ? lastUpdateTime.getTime() : 0,
@@ -86,13 +91,45 @@ export const ToolMessage: React.FC<ToolMessageProps> = ({
     }
   }, [isThisShellFocused]);
 
+  // Auto-hide copied message after 2 seconds
+  useEffect(() => {
+    if (copiedMessage) {
+      const timer = setTimeout(() => setCopiedMessage(null), 2000);
+      return () => clearTimeout(timer);
+    }
+    return undefined;
+  }, [copiedMessage]);
+
+  // Handle keyboard shortcut for copying shell command
+  useInput((input, key) => {
+    // Only handle for shell commands and when not focused on shell input
+    if (!isShellCommand || isThisShellFocused || emphasis !== 'high') {
+      return;
+    }
+
+    // ctrl+y to copy command
+    if (key.ctrl && input === 'y' && args?.['command']) {
+      const command = args['command'] as string;
+      copyToClipboard(command)
+        .then(() => {
+          setCopiedMessage('Copied!');
+        })
+        .catch(() => {
+          setCopiedMessage('Copy failed');
+        });
+    }
+  });
+
   const isThisShellFocusable =
-    (name === SHELL_COMMAND_NAME || name === 'Shell') &&
+    isShellCommand &&
     status === ToolCallStatus.Executing &&
     config?.getEnableInteractiveShell();
 
   const shouldShowFocusHint =
     isThisShellFocusable && (showFocusHint || userHasFocused);
+
+  const shouldShowCopyHint =
+    isShellCommand && emphasis === 'high' && args?.['command'];
 
   return (
     <Box flexDirection="column" width={terminalWidth}>
@@ -116,6 +153,13 @@ export const ToolMessage: React.FC<ToolMessageProps> = ({
             </Text>
           </Box>
         )}
+        {shouldShowCopyHint && !shouldShowFocusHint ? (
+          <Box marginLeft={1} flexShrink={0}>
+            <Text color={theme.text.accent}>
+              {copiedMessage ?? '(ctrl+y to copy)'}
+            </Text>
+          </Box>
+        ) : null}
         {emphasis === 'high' && <TrailingIndicator />}
       </StickyHeader>
       <Box
